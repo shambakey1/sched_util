@@ -21,7 +21,7 @@ void initDB(string data_set_host,string data_set,string user_name,string user_pa
         srand(time(0));
     }
     catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -76,7 +76,7 @@ void endDB(){
         initialized=false;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -137,7 +137,7 @@ int comp_dist(string s){
         return 0;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -194,7 +194,7 @@ vector<double> selectPeriod(int hyperperiod){
         return findDevisors(hyperperiod,period[0],period[1]);
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -273,7 +273,7 @@ double selectUtil(string util_dist,double stm_inst,double rt_inst,double period)
         return (double)sel_util/100.0;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -352,7 +352,7 @@ double selectTotalTx(string total_tx_dist,double stm_inst,double wcet){
         return (double)sel_total/100.0;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -449,7 +449,7 @@ double selectMaxTx(string max_tx_dist,double total_tx,double stm_inst,double wce
         return (double)sel_max/100.0;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -546,7 +546,7 @@ double selectMinTx(string min_tx_dist,double max_tx,double stm_inst,double wcet)
         return (double)sel_min/100.0;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -644,7 +644,7 @@ vector<double> selectObj(string obj_dist,int total_no_obj,double por_len,double 
         return sel_objs;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -712,7 +712,7 @@ void checkPortions(vector<struct task_por> *portions){
         }
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -866,7 +866,7 @@ void addPortions(double total_tx,double max_tx,double min_tx,double wcet,string 
         checkPortions(portions);
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -1029,7 +1029,7 @@ void modifyPortions(string data_set_host,string data_set,string user_name,string
         }
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -1133,7 +1133,7 @@ void checkObjs(string data_set_host,string data_set,string user_name,string user
         }
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -1304,7 +1304,7 @@ void add_dataset(string data_set_host,string data_set,string user_name,string us
         delete res;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -1384,7 +1384,7 @@ void fixDatasets(string data_set_host,string data_set,string user_name,string us
         delete mis_res;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -1446,7 +1446,7 @@ vector<double> extractObj(string objs){
         return ext_objs;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -1518,7 +1518,7 @@ vector<struct task_por> readTaskPor(int dataset_id,int task_no){
         return portions;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -1595,7 +1595,7 @@ vector<struct rt_task> readTaskSet(string data_set_host,string data_set,string u
         return dataset_tasks;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -1656,7 +1656,7 @@ int getUtilCap(string data_set_host,string data_set,string user_name,string user
         return util_res->getInt("u_cap");
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -1735,7 +1735,7 @@ vector<int> extractDataSet(string data_set_host,string data_set,string user_name
         return dataset_ids;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -1804,7 +1804,7 @@ bool exists(int dataset_id){
         }
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -1858,7 +1858,7 @@ int detHyperPeriod(double per,int threshold){
         return (rand()%(int)(threshold*(1-per)))+(int)(threshold*per);
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -1923,7 +1923,7 @@ int calcHyperPeriod(string data_set_host,string data_set,string user_name,string
         return hyperperiod;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -1990,7 +1990,7 @@ vector<int> calcHyperPeriod(string data_set_host,string data_set,string user_nam
         return hyperperiods;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -2059,7 +2059,7 @@ vector<int> extractProc(string proc){
         }
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -2167,7 +2167,7 @@ void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > tota
         }
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -2231,7 +2231,7 @@ void delAll(){
         delete stmt;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -2301,7 +2301,7 @@ void debug_getopt(string operation,string cm,double u,double run_time,double pro
         cout<<"Dataset Password: "<<dataset_pass<<endl;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -2450,7 +2450,7 @@ void remTasks(string data_set_host,string data_set,string user_name,string user_
         delete task_res;
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -2521,7 +2521,7 @@ void fixNoTasks(string data_set_host,string data_set,string user_name,string use
         }
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
@@ -2620,7 +2620,7 @@ void removeErrPortions(string data_set_host,string data_set,string user_name,str
         }
     }
         catch(sql::InvalidArgumentException &e) {
-        cout << "#\t Invalid Argument: " << e.what();
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 	cout << " (MySQL error code: " << e.getErrorCode();
 	cout << ", SQLState: " << e.getSQLState() << " )" << endl;
     }
