@@ -12,7 +12,6 @@
 #include <iostream>
 #include <string>
 #include <time.h>
-//#include "mysql_connection.h"
 #include <cppconn/driver.h>
 #include <cppconn/exception.h>
 #include <cppconn/resultset.h>
@@ -37,7 +36,6 @@ struct task_por{                //Captures information about each portion of a t
     vector<double> por_obj;        //Objects access by this portion. -1 if non-critical section
     double mod_por_len;         //modified from por_len according to utilization
 };
-
 struct rt_task{
     //information about real-time task
     long double deadline;
@@ -47,6 +45,7 @@ struct rt_task{
     vector<int> processors;
     vector<struct task_por> portions;
 };
+extern int DATASET_ID;
 
 extern int comp_dist(string s);                          //Checks required total transactions length distribution
 extern void add_dataset(string data_set_host,string data_set,string user_name,string user_pass,double util_cap,string util_dist,double no_datasets,string total_dist,string max_dist,string min_dist,string n_obj,string n_obj_dist,double stm_inst,double rt_inst);       //Adds a number of datasets
@@ -71,7 +70,7 @@ extern vector<int> extractDataSet(string data_set_host,string data_set,string us
 extern int detHyperPeriod(double per,int threshold);    //Returns hyperperiod threshold
 extern vector<int> extractProc(string proc);    //Extracts available processor for current task if not all
                                                 //Note that "proc" values is "all" or CSV of processor numbers
-extern void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > total_result);//stores results into database
+extern void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > total_result,string sync_alg);//stores results into database
                                                 //Note that this function depends on the final result format produce by Sched_Test_App
                                                 //which is in the form of "vector<vector<vector<unsigned long long> > >
 extern void delAll();   //Remove all data in all tables. Useful in case of invalid inputs

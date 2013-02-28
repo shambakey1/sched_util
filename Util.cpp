@@ -7,6 +7,7 @@ sql::Statement *stmt;
 
 string total_comp[]={"ul","um","uh","bl","bm","bh"};
 bool initialized=false; //indicates wether user has connected to DB or not
+int DATASET_ID=0;
 
 void initDB(string data_set_host,string data_set,string user_name,string user_pass){
     
@@ -1653,6 +1654,7 @@ int getUtilCap(string data_set_host,string data_set,string user_name,string user
         stmt=con->createStatement();
         ss<<"select u_cap from datasets where id="<<dataset_id;
         util_res=stmt->executeQuery(ss.str());
+	util_res->first();
         return util_res->getInt("u_cap");
     }
         catch(sql::InvalidArgumentException &e) {
@@ -2055,8 +2057,8 @@ vector<int> extractProc(string proc){
                 tmp_indx=++indx;
             }
             processors.push_back(atoi((proc.substr(tmp_indx)).data()));
-            return processors;
         }
+	return processors;
     }
         catch(sql::InvalidArgumentException &e) {
         cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
@@ -2106,7 +2108,7 @@ vector<int> extractProc(string proc){
     }
 }
 
-void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > total_result){
+void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > total_result,string sync_alg){
     //stores results into database
     //Note that this function depends on the final result format produce by Sched_Test_App
     //which is in the form of "vector<vector<vector<unsigned long long> > >
@@ -2115,19 +2117,19 @@ void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > tota
             cout<<"Error: database is not connected"<<endl;
             exit(0);
         }
-        int res_id; //Identifier for which set of results are currently collected
+//        int res_id; //Identifier for which set of results are currently collected
                     //Note that the same dataset can have different id results if run different times
         int task_id;        //Id of current task
         int exp_no;         //experiment number for current dataset. It is fixed for one run of all datasets
         int indx=0;         //Index of current result in total_result. It might differ from
                             //task_id, because the latter might start at some number other than 0
-        sql::ResultSet *final_res;
+//        sql::ResultSet *final_res;
         sql::ResultSet *task_res;   //Holds tasks of current dataset
         sql::ResultSet *exp_res;
         stringstream ss;
         ss.str("");
         stmt=con->createStatement();
-        ss<<"select max(exp_no) from sh_results";
+        ss<<"select max(exp_no) from sh_results where dataset="<<dataset_id;
         exp_res=stmt->executeQuery(ss.str());
         if(exp_res->next()){
             //results already contains data
@@ -2142,6 +2144,7 @@ void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > tota
         task_res=stmt->executeQuery(ss.str());
         while(task_res->next()){
             task_id=task_res->getInt("id");
+/*
             ss.str("");
             ss<<"select max(id) from sh_results where task="<<task_id<<" and dataset="<<dataset_id;
             final_res=stmt->executeQuery(ss.str());
@@ -2153,15 +2156,19 @@ void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > tota
                 //No previous results regarding this dataset and task
                 res_id=0;
             }
-            for(int k=0;k<total_result[indx][4].size();k++){
+*/
+            for(int k=0;k<total_result[indx][0].size();k++){
                 ss.str("");
-                ss<<"INSERT INTO `test`.`sh_results` (`id`,`dataset`,`task`,`commit`,`abr_no`,`abr_dur`,";
-                ss<<"`start`,`deadline`,`end`,`response`,'exp_no') VALUES(";
-                ss<<res_id<<","<<dataset_id<<","<<task_id<<","<<total_result[indx][1][k]<<",";
+                ss<<"INSERT INTO `test`.`sh_results` (`instance`,`dataset`,`task`,`commit`,`abr_no`,`abr_dur`,";
+                ss<<"`start`,`deadline`,`end`,`response`,`exp_no`,`sync`) VALUES(";
+                ss<<total_result[indx][0][k]<<","<<dataset_id<<","<<task_id<<","<<total_result[indx][1][k]<<",";
                 ss<<total_result[indx][2][k]<<","<<total_result[indx][3][k]<<","<<total_result[indx][4][k]<<",";
-                ss<<total_result[indx][5][k]<<","<<total_result[indx][6][k]<<","<<total_result[indx][7][k]<<","<<exp_no<<")";
+                ss<<total_result[indx][5][k]<<","<<total_result[indx][6][k]<<","<<total_result[indx][7][k]<<","<<exp_no<<",\""<<sync_alg<<"\")";
+/************ DEBUG 1 ST *************/
+cout<<ss.str()<<endl;
+/************* DBEUG 1 END *************/
                 stmt->executeUpdate(ss.str());
-                res_id++;
+//                res_id++;
             }
             indx++;
         }
