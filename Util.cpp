@@ -2117,13 +2117,10 @@ void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > tota
             cout<<"Error: database is not connected"<<endl;
             exit(0);
         }
-//        int res_id; //Identifier for which set of results are currently collected
-                    //Note that the same dataset can have different id results if run different times
         int task_id;        //Id of current task
         int exp_no;         //experiment number for current dataset. It is fixed for one run of all datasets
         int indx=0;         //Index of current result in total_result. It might differ from
                             //task_id, because the latter might start at some number other than 0
-//        sql::ResultSet *final_res;
         sql::ResultSet *task_res;   //Holds tasks of current dataset
         sql::ResultSet *exp_res;
         stringstream ss;
@@ -2144,19 +2141,6 @@ void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > tota
         task_res=stmt->executeQuery(ss.str());
         while(task_res->next()){
             task_id=task_res->getInt("id");
-/*
-            ss.str("");
-            ss<<"select max(id) from sh_results where task="<<task_id<<" and dataset="<<dataset_id;
-            final_res=stmt->executeQuery(ss.str());
-            if(final_res->next()){
-                //results already contains data regarding this task and dataset
-                res_id=(final_res->getInt("max(id)"))+1;
-            }
-            else{
-                //No previous results regarding this dataset and task
-                res_id=0;
-            }
-*/
             for(int k=0;k<total_result[indx][0].size();k++){
                 ss.str("");
                 ss<<"INSERT INTO `test`.`sh_results` (`instance`,`dataset`,`task`,`commit`,`abr_no`,`abr_dur`,";
@@ -2164,11 +2148,7 @@ void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > tota
                 ss<<total_result[indx][0][k]<<","<<dataset_id<<","<<task_id<<","<<total_result[indx][1][k]<<",";
                 ss<<total_result[indx][2][k]<<","<<total_result[indx][3][k]<<","<<total_result[indx][4][k]<<",";
                 ss<<total_result[indx][5][k]<<","<<total_result[indx][6][k]<<","<<total_result[indx][7][k]<<","<<exp_no<<",\""<<sync_alg<<"\")";
-/************ DEBUG 1 ST *************/
-cout<<ss.str()<<endl;
-/************* DBEUG 1 END *************/
                 stmt->executeUpdate(ss.str());
-//                res_id++;
             }
             indx++;
         }
@@ -2672,4 +2652,128 @@ void removeErrPortions(string data_set_host,string data_set,string user_name,str
     catch(exception e){
         cout<<"Exception in fixNoTasks():"<<e.what()<<endl;
     }
+}
+
+ResLock::ResLock(int res_in,int lock_in){
+	res_id=res_in;
+	lock_id=lock_in;
+}
+
+ResLock::ResLock(int res_in){
+	res_id=res_in;
+	lock_id=0;
+}
+
+bool ResLock::operator<(const ResLock &reslock_in){
+	if(this->res_id<reslock_in.res_id){
+		return true;
+	}
+	else{
+		return false;
+	}
+}
+
+bool resLockComp(const ResLock &reslock1,const ResLock &reslock2){
+	if(reslock1.res_id<reslock2.res_id){
+		return true;
+	}
+	return false;
+}
+
+vector<ResLock> getResLock(vector<vector<ResLock> > all_res_in){
+	/*
+	 * This function returns a vector of all resources used by all tasks in the task
+	 * set, and the corresponding lock for each resource.
+	 */
+
+	/*
+	 * Each vector in all_res_in is a set of objects accessed by the same transaction
+	 * (Not necessarily the same task because there can be multiple transactions in the
+	 * same task)
+	 */
+
+	vector<ResLock> final_res_lock;	//final vector of resources and corresponding locks
+	vector<ResLock> tmp_final_res_lock;	//temporary vector to hold intermediate final result
+	vector<ResLock> com_res_lock;	//common resources between two sets
+	vector<ResLock>::iterator it;
+	for(int i=0;i<(signed)all_res_in.size();i++){
+		if(i==0){
+			sort(all_res_in[0].begin(),all_res_in[0].end(),resLockComp);
+			//First set of objects should all have a lock of 0
+			for(int j=0;j<(signed)all_res_in[0].size();j++){
+				all_res_in[0][j].lock_id=0;
+			}
+		}
+		else{
+			sort(all_res_in[i].begin(),all_res_in[i].end(),resLockComp);
+			//compare current set of objects with previous sets
+			for(int j=0;j<i;j++){
+				if(all_res_in[i].size()>all_res_in[j].size()){
+					com_res_lock.resize(all_res_in[i].size());
+				}
+				else{
+					com_res_lock.resize(all_res_in[j].size());
+				}
+				it=set_intersection(all_res_in[i].begin(),all_res_in[i].end(),all_res_in[j].begin(),all_res_in[j].end(),com_res_lock.begin());
+				com_res_lock.resize(it-com_res_lock.begin());
+				if(!com_res_lock.empty()){
+					/*
+					 * current set has common objects with previous set. Assign the same
+					 * lock for objects in both sets.
+					 */
+					for(int k=0;k<(signed)all_res_in[i].size();k++){
+						all_res_in[i][k].lock_id=all_res_in[j][0].lock_id;
+					}
+					break;
+				}
+				else{
+					/*
+					 * Increase lock number of examined set of objects by 1 over current set
+					 */
+					for(int k=0;k<(signed)all_res_in[i].size();k++){
+						all_res_in[i][k].lock_id=(all_res_in[j][0].lock_id)+1;
+					}
+				}
+			}
+		}
+	}
+	/*
+	 * Now, unite all sets of objects with their corresponding locks in the final_res_lock
+	 */
+	tmp_final_res_lock=all_res_in[0];
+	for(int i=1;i<(signed)all_res_in.size();i++){
+		final_res_lock.resize(tmp_final_res_lock.size()+all_res_in[i].size());
+		it=set_union(all_res_in[i].begin(),all_res_in[i].end(),tmp_final_res_lock.begin(),tmp_final_res_lock.end(),final_res_lock.begin());
+		final_res_lock.resize(it-final_res_lock.begin());
+		tmp_final_res_lock=final_res_lock;
+	}
+	//return the final vector
+	return final_res_lock;
+}
+
+vector<ResLock> getOMLPResLock(vector<struct rt_task> total_tasks){
+	/*
+	 * Return a vecotr of all resources and corresponding lock for each resource in
+	 * Return case of OMLP. The input is the set of all tasks. The function combines
+	 * resources in each critical section in one vector. Each vector is added to the final
+	 * vector that is passed to 'getResLock' function to specifiy locks for each resource
+	 */
+	vector<vector<ResLock> reslock_total;
+	vector<ResLock> reslock_cur;
+	for(int i=0;i<total_tasks.size();i++){
+		//Traverse through all tasks
+		for(int j=0;j<total_tasks[i].portions.size();j++){
+			//Traverse through all portions of the same task
+			if(total_tasks[i].portions[j].por_type){
+				//Consider only critical sections
+				reslock_cur.clear();
+				for(int k=0;k<total_tasks[i].portions[j].por_obj.size();k++){
+					//Traverse through all objects in the current critical section
+					reslock_cur.push_back(ResLock(total_tasks[i].portions[j].por_obj[k]));
+				}
+				reslock_total.push_back(reslock_cur);
+			}
+		}
+	}
+	return getResLock(reslock_total);
 }

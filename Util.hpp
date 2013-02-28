@@ -24,9 +24,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <boost/math/common_factor_rt.hpp>
+#include <algorithm>
 
 using namespace std;
-
 
 extern string total_comp[];    //Used for comparison against different distributions
 extern bool initialized;        //If true, then database is already connected
@@ -44,6 +44,15 @@ struct rt_task{
     long double mod_wcet;
     vector<int> processors;
     vector<struct task_por> portions;
+};
+class ResLock{
+public:
+	int res_id;	//resource id
+	int lock_id;	//lock id for the corresponding resource
+	ResLock(){};
+	ResLock(int);
+	ResLock(int,int);
+	bool operator<(const ResLock &);
 };
 extern int DATASET_ID;
 
@@ -91,6 +100,8 @@ extern int calcHyperPeriod(string data_set_host,string data_set,string user_name
 extern vector<int> calcHyperPeriod(string data_set_host,string data_set,string user_name,string user_pass);     //calculates hyperperiod for all datasets
 extern vector<double> findDevisors(int devidend,int low_limit, int hi_limit);      //Finds all devisors of devidend between low_lim and hi_limit
 extern void removeErrPortions(string data_set_host,string data_set,string user_name,string user_pass);  //remove portions whose count is 1
+extern vector<ResLock> getResLock(vector<vector<ResLock> > all_res_in);	//Return a vecotr of all resources and corresponding lock for each resource
+extern vector<ResLock> getOMLPResLock(vector<struct rt_task>);	//Return a vecotr of all resources and corresponding lock for each resource in case of OMLP. The input is the set of all tasks
 #endif	/* UTIL_HPP */
 
 
