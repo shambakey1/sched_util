@@ -2754,11 +2754,11 @@ vector<ResLock> getResLock(vector<vector<ResLock> > all_res_in){
 vector<ResLock> getOMLPResLock(vector<struct rt_task> total_tasks){
 	/*
 	 * Return a vecotr of all resources and corresponding lock for each resource in
-	 * Return case of OMLP. The input is the set of all tasks. The function combines
+	 * case of OMLP. The input is the set of all tasks. The function combines
 	 * resources in each critical section in one vector. Each vector is added to the final
 	 * vector that is passed to 'getResLock' function to specifiy locks for each resource
 	 */
-	vector<vector<ResLock> reslock_total;
+	vector<vector<ResLock> > reslock_total;
 	vector<ResLock> reslock_cur;
 	for(int i=0;i<total_tasks.size();i++){
 		//Traverse through all tasks
@@ -2776,4 +2776,78 @@ vector<ResLock> getOMLPResLock(vector<struct rt_task> total_tasks){
 		}
 	}
 	return getResLock(reslock_total);
+}
+
+vector<ResLock> getRNLPResLock(vector<struct rt_task> total_tasks){
+	/*
+	 * Return a vecotr of all resources and corresponding lock for each resource in
+	 * Return case of RNLP. The input is the set of all tasks. Current implementation of RNLP
+	 * assigns distincit lock for each object. Each vector is added to the final
+	 * vector that is passed to 'getResLock' function to specifiy locks for each resource
+	 */
+	vector<vector<ResLock> > reslock_total;
+	vector<ResLock> reslock_cur;
+	for(int i=0;i<total_tasks.size();i++){
+		//Traverse through all tasks
+		for(int j=0;j<total_tasks[i].portions.size();j++){
+			//Traverse through all portions of the same task
+			if(total_tasks[i].portions[j].por_type){
+				//Consider only critical sections
+				for(int k=0;k<total_tasks[i].portions[j].por_obj.size();k++){
+					//Traverse through all objects in the current critical section
+					reslock_cur.clear();
+					reslock_cur.push_back(ResLock(total_tasks[i].portions[j].por_obj[k]));
+					reslock_total.push_back(reslock_cur);
+				}
+			}
+		}
+	}
+	return getResLock(reslock_total);
+}
+
+set<int> getDisLocks(vector<ResLock> allreslocks){
+	/*
+	 * Returns a set of distincit locks
+	 */
+	set<int> distlocks;
+	for(int i=0;i<allreslocks.size();i++){
+		distlocks.insert(allreslocks[i].lock_id);
+	}
+	return distlocks;
+}
+
+set<int> getDisLockCS(vector<double> objs,vector<ResLock> allreslocks,string lock_pro){
+	/*
+	 * Returns array of distincit locks required for current cirtical section. 'allreslocks' is the
+	 * vector containing all resources and corresponding locks
+	 */
+	set<int> distlocks;
+	if(!lock_pro.compare("OMLP")){
+		/*
+		 * In case of OMLP, all objects in the same critical section use the same lock. So it is
+		 * enough to return the lock for the first object
+		 */
+		for(int i=0;i<(signed)objs.size();i++){
+			for(int j=0;j<(signed)allreslocks.size();j++){
+				if(allreslocks[j].res_id==(int)objs[i]){
+					distlocks.insert(allreslocks[i].lock_id);
+					return distlocks;
+				}
+			}
+		}
+	}
+	else if(!lock_pro.compare("RNLP")){
+		/*
+		 * In this case (for the current implementation of RNLP), each object has its own lock
+		 */
+		for(int i=0;i<(signed)objs.size();i++){
+			for(int j=0;j<(signed)allreslocks.size();j++){
+				if(allreslocks[j].res_id==(int)objs[i]){
+					distlocks.insert(allreslocks[i].lock_id);
+					break;
+				}
+			}
+		}
+	}
+	return distlocks;
 }

@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <boost/math/common_factor_rt.hpp>
 #include <algorithm>
+#include <set>
 
 using namespace std;
 
@@ -102,6 +103,10 @@ extern vector<double> findDevisors(int devidend,int low_limit, int hi_limit);   
 extern void removeErrPortions(string data_set_host,string data_set,string user_name,string user_pass);  //remove portions whose count is 1
 extern vector<ResLock> getResLock(vector<vector<ResLock> > all_res_in);	//Return a vecotr of all resources and corresponding lock for each resource
 extern vector<ResLock> getOMLPResLock(vector<struct rt_task>);	//Return a vecotr of all resources and corresponding lock for each resource in case of OMLP. The input is the set of all tasks
+extern vector<ResLock> getRNLPResLock(vector<struct rt_task>);	//Return a vecotr of all resources and corresponding lock for each resource in case of RNLP. The input is the set of all tasks
+extern set<int> getDisLocks(vector<ResLock>);	//Returns a set of distincit locks
+extern set<int> getDisLockCS(vector<double> objs,vector<ResLock> allreslocks,string lock_pro);	//Returns set of distincit locks required for current cirtical section. 'allreslocks' is the vector containing all resources and corresponding locks
+
 #endif	/* UTIL_HPP */
 
 
