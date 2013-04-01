@@ -80,7 +80,7 @@ extern vector<int> extractDataSet(string data_set_host,string data_set,string us
 extern int detHyperPeriod(double per,int threshold);    //Returns hyperperiod threshold
 extern vector<int> extractProc(string proc);    //Extracts available processor for current task if not all
                                                 //Note that "proc" values is "all" or CSV of processor numbers
-extern void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > total_result,string sync_alg);//stores results into database
+extern void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > total_result,string sync_alg,string sch);//stores results into database
                                                 //Note that this function depends on the final result format produce by Sched_Test_App
                                                 //which is in the form of "vector<vector<vector<unsigned long long> > >
 extern void delAll();   //Remove all data in all tables. Useful in case of invalid inputs
