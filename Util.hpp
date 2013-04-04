@@ -73,14 +73,14 @@ extern vector<double> selectObj(string obj_dist,int total_no_obj,double por_len,
 extern void initDB(string data_set_host,string data_set,string user_name,string user_pass);   //Initiates connection to DB
 extern void endDB();    //Deletes connection to DB and deletes parameters
 extern void addPortions(double total_tx,double max_tx,double min_tx,double wcet,string obj_dist,int total_no_obj,vector<struct task_por> *portions,double stm_inst,double rt_inst);    //Return vector of portion lengths for current task
-extern vector<struct rt_task> readTaskSet(string data_set_host,string data_set,string user_name,string user_pass,int dataset_id);   //Reads tasks's information from a taskset file
-extern vector<struct task_por> readTaskPor(int dataset_id,int task_no);           //Reads different portions of a single task
+extern vector<struct rt_task> readTaskSet(string data_set_host,string data_set,string user_name,string user_pass,int dataset_id,double sh_lev=1,int transitive=0);   //Reads tasks's information from a taskset file
+extern vector<struct task_por> readTaskPor(int dataset_id,int task_no,double sh_lev=1,int transitive=0);           //Reads different portions of a single task
 extern vector<double> extractObj(string objs);  //Creates a vector of objects from a CSV string
 extern vector<int> extractDataSet(string data_set_host,string data_set,string user_name,string user_pass,double util_cap,string util_dist,string total_dist,double total_tx,string max_dist,double max_tx,string min_dist,double min_tx,double n_obj,string n_obj_dist); //return IDs for all datasets that meet requirements
 extern int detHyperPeriod(double per,int threshold);    //Returns hyperperiod threshold
 extern vector<int> extractProc(string proc);    //Extracts available processor for current task if not all
                                                 //Note that "proc" values is "all" or CSV of processor numbers
-extern void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > total_result,string sync_alg,string sch);//stores results into database
+extern void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > total_result,string sync_alg,string sch,int cp_enable,double sh_lev,int transitive);//stores results into database
                                                 //Note that this function depends on the final result format produce by Sched_Test_App
                                                 //which is in the form of "vector<vector<vector<unsigned long long> > >
 extern void delAll();   //Remove all data in all tables. Useful in case of invalid inputs
@@ -106,7 +106,12 @@ extern vector<ResLock> getOMLPResLock(vector<struct rt_task>);	//Return a vecotr
 extern vector<ResLock> getRNLPResLock(vector<struct rt_task>);	//Return a vecotr of all resources and corresponding lock for each resource in case of RNLP. The input is the set of all tasks
 extern set<int> getDisLocks(vector<ResLock>);	//Returns a set of distincit locks
 extern set<int> getDisLockCS(vector<double> objs,vector<ResLock> allreslocks,string lock_pro);	//Returns set of distincit locks required for current cirtical section. 'allreslocks' is the vector containing all resources and corresponding locks
-
+extern void modObjTx(string data_set_host,string data_set,string user_name,string user_pass,double stm_inst,double rt_inst,double sh_lev,bool transitive,bool update); //Assign objects to transactions in different patterns (i.e., introduces transitive retry,
+																																						//Assign objects to transactions with maximum sharing level equal to sh_lev
+																																						//The current implementation of object sharing assumes objects are accessed at equidistant points within each transaction.
+																																						//object sharing starts at (1-sh_lev)*transactional length, and ends at the end of transaction)
+																																						//if update is true, then objects that already exist are updated. Otherwise, already existing objects are left intact
+extern void modObjTransitive(string data_set_host,string data_set,string user_name,string user_pass,int total_no_obj);	//Generate objects in a pattern that introduces transitive retry
 #endif	/* UTIL_HPP */
 
 

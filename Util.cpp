@@ -613,8 +613,6 @@ vector<double> selectObj(string obj_dist,int total_no_obj,double por_len,double 
         vector<double> total_objs;     //List of all objects
         vector<double> sel_objs;       //Holds selected objects
 
-
-
         /* Initialize a list of all objects to select desired objects from it */
         for(int i=0;i<total_no_obj;i++){
             total_objs.push_back(i);
@@ -929,7 +927,7 @@ void modifyPortions(string data_set_host,string data_set,string user_name,string
         double total_tx,max_tx,min_tx,wcet,por_len,period;
         string obj_dist;
         stmt=con->createStatement();
-/* tmp_step */        ss<<"select * from datasets where id>38877";
+        ss<<"select * from datasets";
 		dataset_res=stmt->executeQuery(ss.str());
         while(dataset_res->next()){
             /**///cout<<"************ DATATSET "<<dataset_res->getInt("id")<<" ************"<<endl;
@@ -1494,7 +1492,7 @@ vector<double> extractObj(string objs){
     }
 }
 
-vector<struct task_por> readTaskPor(int dataset_id,int task_no){
+vector<struct task_por> readTaskPor(int dataset_id,int task_no,double sh_lev,int transitive){
     //Reads different portions of a single task
     try{
         if(!initialized){
@@ -1505,7 +1503,7 @@ vector<struct task_por> readTaskPor(int dataset_id,int task_no){
         sql::ResultSet *por_res;
         vector<struct task_por> portions;   //resultant vector of tasks' portions
         struct task_por cur_por;            //current read portion of current task
-        ss<<"select * from task_st where dataset="<<dataset_id<<" and task="<<task_no;
+        ss<<"select * from task_st where dataset="<<dataset_id<<" and task="<<task_no<<" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive;
         stmt=con->createStatement();
         por_res=stmt->executeQuery(ss.str());
         while(por_res->next()){
@@ -1566,7 +1564,7 @@ vector<struct task_por> readTaskPor(int dataset_id,int task_no){
     }
 }
 
-vector<struct rt_task> readTaskSet(string data_set_host,string data_set,string user_name,string user_pass,int dataset_id){
+vector<struct rt_task> readTaskSet(string data_set_host,string data_set,string user_name,string user_pass,int dataset_id,double sh_lev,int transitive){
     //Reads tasks's information from a specific taskset file
     try{
         if(!initialized){
@@ -1588,7 +1586,7 @@ vector<struct rt_task> readTaskSet(string data_set_host,string data_set,string u
             cur_task.mod_wcet=cur_task.wcet;
             cur_task.processors=extractProc(task_res->getString("proc"));
             task_id=task_res->getInt("id");
-            cur_task.portions=readTaskPor(dataset_id,task_id);
+            cur_task.portions=readTaskPor(dataset_id,task_id,sh_lev,transitive);
 
             dataset_tasks.push_back(cur_task);
         }
@@ -2108,7 +2106,7 @@ vector<int> extractProc(string proc){
     }
 }
 
-void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > total_result,string sync_alg,string sch){
+void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > total_result,string sync_alg,string sch,int cp_enable,double sh_lev,int transitive){
     //stores results into database
     //Note that this function depends on the final result format produce by Sched_Test_App
     //which is in the form of "vector<vector<vector<unsigned long long> > >
@@ -2144,10 +2142,10 @@ void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > tota
             for(int k=0;k<total_result[indx][0].size();k++){
                 ss.str("");
                 ss<<"INSERT INTO `test`.`sh_results` (`instance`,`dataset`,`task`,`commit`,`abr_no`,`abr_dur`,";
-                ss<<"`start`,`deadline`,`end`,`response`,`exp_no`,`sync`,`sch`) VALUES(";
+                ss<<"`start`,`deadline`,`end`,`response`,`exp_no`,`sync`,`sch`,`cp_enable`,`obj_sh`,`obj_trns_retry`) VALUES(";
                 ss<<total_result[indx][0][k]<<","<<dataset_id<<","<<task_id<<","<<total_result[indx][1][k]<<",";
                 ss<<total_result[indx][2][k]<<","<<total_result[indx][3][k]<<","<<total_result[indx][4][k]<<",";
-                ss<<total_result[indx][5][k]<<","<<total_result[indx][6][k]<<","<<total_result[indx][7][k]<<","<<exp_no<<",\""<<sync_alg<<"\",\""<<sch<<"\")";
+                ss<<total_result[indx][5][k]<<","<<total_result[indx][6][k]<<","<<total_result[indx][7][k]<<","<<exp_no<<",\""<<sync_alg<<"\",\""<<sch<<"\","<<cp_enable<<","<<sh_lev<<","<<transitive<<")";
                 stmt->executeUpdate(ss.str());
             }
             indx++;
@@ -2740,12 +2738,18 @@ vector<ResLock> getResLock(vector<vector<ResLock> > all_res_in){
 	/*
 	 * Now, unite all sets of objects with their corresponding locks in the final_res_lock
 	 */
-	tmp_final_res_lock=all_res_in[0];
-	for(int i=1;i<(signed)all_res_in.size();i++){
-		final_res_lock.resize(tmp_final_res_lock.size()+all_res_in[i].size());
-		it=set_union(all_res_in[i].begin(),all_res_in[i].end(),tmp_final_res_lock.begin(),tmp_final_res_lock.end(),final_res_lock.begin());
-		final_res_lock.resize(it-final_res_lock.begin());
-		tmp_final_res_lock=final_res_lock;
+	if(all_res_in.size()==1){
+		//In case there is only one task
+		final_res_lock=all_res_in[0];
+	}
+	else{
+		tmp_final_res_lock=all_res_in[0];
+		for(int i=1;i<(signed)all_res_in.size();i++){
+			final_res_lock.resize(tmp_final_res_lock.size()+all_res_in[i].size());
+			it=set_union(all_res_in[i].begin(),all_res_in[i].end(),tmp_final_res_lock.begin(),tmp_final_res_lock.end(),final_res_lock.begin());
+			final_res_lock.resize(it-final_res_lock.begin());
+			tmp_final_res_lock=final_res_lock;
+		}
 	}
 	//return the final vector
 	return final_res_lock;
@@ -2850,4 +2854,300 @@ set<int> getDisLockCS(vector<double> objs,vector<ResLock> allreslocks,string loc
 		}
 	}
 	return distlocks;
+}
+
+void modObjSh(string data_set_host,string data_set,string user_name,string user_pass,double sh_lev,int total_no_obj){
+	/*
+	 * This function assumes there are recorded objects in case of sharing level = 100%
+	 * Assign objects to transactions in a different pattern (i.e., Assign objects to transactions with maximum sharing level equal to sh_lev
+	 * The current implementation of object sharing assumes objects are accessed at equidistant points within each transaction.
+	 * object sharing starts at (1-sh_lev)*transactional length, and ends at the end of transaction)
+	 * If update is true, then objects that already exist are updated. Otherwise, already existing objects are left intact
+	 */
+    try{
+        if(!initialized){
+            cout<<"Error: Database is not connected."<<endl;
+            exit(0);
+        }
+        stringstream ss;
+        sql::ResultSet *por_res;
+        int por_id, task_id, dataset_id;
+        double por_len;
+        int total_no_sh_objs;	//Total number of all objects available for sharing
+        int total_no_nsh_objs;	//Total number of all non shared objects available for sharing
+        int sel_no_obj;			//number of objects in current transaction
+        int sel_no_sh_obj;		//number of shared objects in current transaction
+        int sel_no_nsh_obj;		//number of non-shared objects in current transaction
+        int obj_indx;
+        vector<double> nsh_total_objs;	//vector of non shared objects
+        vector<double> sh_total_objs;	//vector of shared objects
+		vector<double> sel_objs;       //Holds selected objects
+		vector<double> tx_objs;			//objects assigned for current transaction
+
+		/*
+		 * Determine total number of shared and non-shared objects
+		 */
+		total_no_nsh_objs=(1-sh_lev)*total_no_obj;
+		total_no_sh_objs=total_no_obj-total_no_nsh_objs;
+
+		/* Initialize a list of all shared and non-shared objects to select desired objects from it */
+		for(int i=0;i<total_no_nsh_objs;i++){
+			nsh_total_objs.push_back(i);
+		}
+		for(int i=total_no_nsh_objs;i<total_no_obj;i++){
+			sh_total_objs.push_back(i);
+		}
+
+		/*
+		 * Insert new records for each portion with the new set of objects
+		 */
+        if(!data_set.compare("all")){
+        	ss<<"select * from task_st where por_type=1 and obj_trns_retry=0 and obj_sh=1";
+        }
+        else{
+        	ss<<"select * from task_st where dataset="<<data_set<<" and por_type=1 and obj_trns_retry=0 and obj_sh=1";
+        }
+        stmt=con->createStatement();
+        por_res=stmt->executeQuery(ss.str());
+        while(por_res->next()){
+        	por_id=por_res->getInt("id");
+        	task_id=por_res->getInt("task");
+        	dataset_id=por_res->getInt("dataset");
+            por_len=por_res->getDouble("por_len");
+            sel_no_obj=(extractObj(por_res->getString("objs"))).size();
+            sel_no_nsh_obj=(int)(sel_no_obj*(1-sh_lev));
+            sel_no_sh_obj=sel_no_obj-sel_no_nsh_obj;
+            sel_no_nsh_obj=total_no_nsh_objs>sel_no_nsh_obj?sel_no_nsh_obj:total_no_nsh_objs;	//current number of non-shared objects should not exceed total number of non-shared objects
+            sel_no_sh_obj=total_no_sh_objs>sel_no_sh_obj?sel_no_sh_obj:total_no_sh_objs;	//current number of share objects should not exceed total number of shared objects
+            vector<double> tmp_nsh_total_obj=nsh_total_objs;
+            vector<double> tmp_sh_total_obj=sh_total_objs;
+            for(int i=0;i<sel_no_nsh_obj;i++){
+            	obj_indx=rand()%(tmp_nsh_total_obj.size());
+            	tx_objs.push_back(tmp_nsh_total_obj[obj_indx]);
+            	tmp_nsh_total_obj.erase(tmp_nsh_total_obj.begin()+obj_indx);
+            }
+            for(int i=0;i<sel_no_sh_obj;i++){
+            	obj_indx=rand()%(tmp_sh_total_obj.size());
+            	tx_objs.push_back(tmp_sh_total_obj[obj_indx]);
+            	tmp_sh_total_obj.erase(tmp_sh_total_obj.begin()+obj_indx);
+            }
+
+            //Insert the new task portion
+            stmt=con->createStatement();
+			ss.str("");
+			ss<<"INSERT INTO `test`.`task_st`(`dataset`,`task`,`id`,`por_type`,`por_len`,`obj_sh`,`objs`) VALUES(";
+			ss<<dataset_id<<","<<task_id<<","<<por_id<<",1,"<<por_len<<","<<sh_lev;
+			// Insert list of objects for current portion
+			ss<<",'";
+			for(int h=0;h<tx_objs.size();h++){
+				ss<<tx_objs[h];
+				if(h!=tx_objs.size()-1){
+					ss<<",";
+				}
+				else{
+					ss<<"')";
+				}
+			}
+			stmt->execute(ss.str());
+
+            //Clear tx_objs for the next task portion
+            tx_objs.clear();
+        }
+        delete por_res;
+    }
+    catch(sql::InvalidArgumentException &e) {
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
+		cout << " (MySQL error code: " << e.getErrorCode();
+		cout << ", SQLState: " << e.getSQLState() << " )" << endl;
+    }
+    catch (sql::MethodNotImplementedException &e){
+        cout << "#\t Not implemented: " << e.what();
+		cout << " (MySQL error code: " << e.getErrorCode();
+		cout << ", SQLState: " << e.getSQLState() << " )" << endl;
+    }
+    catch (sql::SQLException &e){
+        /*
+		The MySQL Connector/C++ throws three different exceptions:
+		- sql::MethodNotImplementedException (derived from sql::SQLException)
+		- sql::InvalidArgumentException (derived from sql::SQLException)
+		- sql::SQLException (derived from std::runtime_error)
+
+                 sql::SQLException is the base class.
+        */
+		cout << endl;
+		cout << "# ERR: DbcException in " << __FILE__;
+		cout << "(" << EXAMPLE_FUNCTION << ") on line " << __LINE__ << endl;
+		/* Use what(), getErrorCode() and getSQLState() */
+		cout << "# ERR: " << e.what();
+		cout << " (MySQL error code: " << e.getErrorCode();
+		cout << ", SQLState: " << e.getSQLState() << " )" << endl;
+
+		if (e.getErrorCode() == 1047) {
+				/*
+				 Error: 1047 SQLSTATE: 08S01 (ER_UNKNOWN_COM_ERROR)
+				Message: Unknown command
+				*/
+			cout << "# ERR: Your server seems not to support PS at all because its MYSQL <4.1" << endl;
+		}
+				cout << "not ok 1 - examples/exceptions.cpp" << endl;
+    }
+    catch (std::runtime_error &e) {
+        cout << endl;
+        cout << "# ERR: runtime_error in " << __FILE__;
+        cout << "(" << EXAMPLE_FUNCTION << ") on line " << __LINE__ << endl;
+        cout << "# ERR: " << e.what() << endl;
+        cout << "not ok 1 - examples/exceptions.cpp" << endl;
+    }
+    catch(exception e){
+        cout<<"Exception in readTaskPor():"<<e.what()<<endl;
+    }
+}
+
+void modObjTransitive(string data_set_host,string data_set,string user_name,string user_pass,int total_no_obj){
+	/*
+	 * This function assumes there are recorded objects in case of non-transitive retry.
+	 * Assign objects to transactions in a different pattern (i.e., pattern that introduces tansitive
+	 * retry)
+	 */
+    try{
+        if(!initialized){
+            cout<<"Error: Database is not connected."<<endl;
+            exit(0);
+        }
+        stringstream ss;
+        sql::ResultSet *por_res;
+        int por_id, task_id, dataset_id,prev_dataset_id,prev_task_id;
+        double por_len;
+        int sel_no_obj;			//number of objects in any transaction in current task
+        int prev_sel_no_obj;	//number of objects in any transaction in previous task
+        int sel_no_sh_obj;		//number of shared objects in current transaction
+        vector<double> prev_task_objs;		//objects assigned to all transactions of previous task
+		vector<double> task_objs;			//objects assigned for all transactions of current task
+
+		prev_dataset_id=-1;	//Just for the start
+		prev_task_id=-1;	//Just for the start
+
+		/*
+		 * Insert new records for each portion with the new set of objects
+		 */
+        if(!data_set.compare("all")){
+        	ss<<"select * from task_st where por_type=1 and obj_trns_retry=0 and obj_sh=1";
+        }
+        else{
+        	ss<<"select * from task_st where dataset="<<data_set<<" and por_type=1 and obj_trns_retry=0 and obj_sh=1";
+        }
+        stmt=con->createStatement();
+        por_res=stmt->executeQuery(ss.str());
+        while(por_res->next()){
+        	task_objs.clear();	//Reset to receive the new set of objects
+        	por_id=por_res->getInt("id");
+        	task_id=por_res->getInt("task");
+        	dataset_id=por_res->getInt("dataset");
+            por_len=por_res->getDouble("por_len");
+            sel_no_obj=(extractObj(por_res->getString("objs"))).size();
+            if(dataset_id!=prev_dataset_id){
+            	//It is a new dataset
+            	prev_dataset_id=dataset_id;
+            	if(task_id!=prev_task_id){
+            		//It is a new task in a new dataset
+            		prev_task_id=task_id;
+            		for(int i=0;i<sel_no_obj;i++){
+            			task_objs.push_back(i);
+            		}
+            		prev_task_objs=task_objs;
+            	}
+            	/*
+            	 * Else case cannot exist beacuse this dataset is accessed for the first time
+            	 */
+            }
+            else{
+            	//Moving through tasks in the same dataset
+            	if(task_id==prev_task_id){
+            		//Moving through portions of the same task
+            		task_objs=prev_task_objs;
+            	}
+            	else{
+            		//Moving to a new task in the same dataset
+            		prev_task_id=task_id;
+            		prev_sel_no_obj=prev_task_objs.size();
+            		sel_no_sh_obj=sel_no_obj>prev_sel_no_obj?prev_sel_no_obj/2:sel_no_obj/2;	//Number of objects to be shared between two consequitive tasks in the same dataset
+            		//Insert shared objects from previous task into this task
+            		for(int i=prev_sel_no_obj-sel_no_sh_obj;i<prev_sel_no_obj;i++){
+            			task_objs.push_back(prev_task_objs[i]);
+            		}
+            		//Insert new objects into this task
+            		for(int i=sel_no_sh_obj;i<sel_no_obj;i++){
+            			task_objs.push_back(task_objs.back()+1);
+            		}
+            		//Update prev_task_objs
+            		prev_task_objs=task_objs;
+            	}
+            }
+
+            //Insert the new task portion
+            stmt=con->createStatement();
+			ss.str("");
+			ss<<"INSERT INTO `test`.`task_st`(`dataset`,`task`,`id`,`por_type`,`por_len`,`obj_trns_retry`,`objs`) VALUES(";
+			ss<<dataset_id<<","<<task_id<<","<<por_id<<",1,"<<por_len<<",1,";
+			// Insert list of objects for current portion
+			ss<<",'";
+			for(int h=0;h<task_objs.size();h++){
+				ss<<task_objs[h];
+				if(h!=task_objs.size()-1){
+					ss<<",";
+				}
+				else{
+					ss<<"')";
+				}
+			}
+			stmt->execute(ss.str());
+        }
+        delete por_res;
+    }
+    catch(sql::InvalidArgumentException &e) {
+        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
+		cout << " (MySQL error code: " << e.getErrorCode();
+		cout << ", SQLState: " << e.getSQLState() << " )" << endl;
+    }
+    catch (sql::MethodNotImplementedException &e){
+        cout << "#\t Not implemented: " << e.what();
+		cout << " (MySQL error code: " << e.getErrorCode();
+		cout << ", SQLState: " << e.getSQLState() << " )" << endl;
+    }
+    catch (sql::SQLException &e){
+        /*
+		The MySQL Connector/C++ throws three different exceptions:
+		- sql::MethodNotImplementedException (derived from sql::SQLException)
+		- sql::InvalidArgumentException (derived from sql::SQLException)
+		- sql::SQLException (derived from std::runtime_error)
+
+                 sql::SQLException is the base class.
+        */
+		cout << endl;
+		cout << "# ERR: DbcException in " << __FILE__;
+		cout << "(" << EXAMPLE_FUNCTION << ") on line " << __LINE__ << endl;
+		/* Use what(), getErrorCode() and getSQLState() */
+		cout << "# ERR: " << e.what();
+		cout << " (MySQL error code: " << e.getErrorCode();
+		cout << ", SQLState: " << e.getSQLState() << " )" << endl;
+
+		if (e.getErrorCode() == 1047) {
+				/*
+				 Error: 1047 SQLSTATE: 08S01 (ER_UNKNOWN_COM_ERROR)
+				Message: Unknown command
+				*/
+			cout << "# ERR: Your server seems not to support PS at all because its MYSQL <4.1" << endl;
+		}
+				cout << "not ok 1 - examples/exceptions.cpp" << endl;
+    }
+    catch (std::runtime_error &e) {
+        cout << endl;
+        cout << "# ERR: runtime_error in " << __FILE__;
+        cout << "(" << EXAMPLE_FUNCTION << ") on line " << __LINE__ << endl;
+        cout << "# ERR: " << e.what() << endl;
+        cout << "not ok 1 - examples/exceptions.cpp" << endl;
+    }
+    catch(exception e){
+        cout<<"Exception in readTaskPor():"<<e.what()<<endl;
+    }
 }
