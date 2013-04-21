@@ -2106,7 +2106,7 @@ vector<int> extractProc(string proc){
     }
 }
 
-void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > total_result,string sync_alg,string sch,int cp_enable,double sh_lev,int transitive){
+void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > total_result,string sync_alg,string sch,int cp_enable,double sh_lev,int transitive,int calibration){
     //stores results into database
     //Note that this function depends on the final result format produce by Sched_Test_App
     //which is in the form of "vector<vector<vector<unsigned long long> > >
@@ -2142,10 +2142,10 @@ void setResults(int dataset_id,vector<vector<vector<unsigned long long> > > tota
             for(int k=0;k<total_result[indx][0].size();k++){
                 ss.str("");
                 ss<<"INSERT INTO `test`.`sh_results` (`instance`,`dataset`,`task`,`commit`,`abr_no`,`abr_dur`,";
-                ss<<"`start`,`deadline`,`end`,`response`,`exp_no`,`sync`,`sch`,`cp_enable`,`obj_sh`,`obj_trns_retry`) VALUES(";
+                ss<<"`start`,`deadline`,`end`,`response`,`exp_no`,`sync`,`sch`,`cp_enable`,`obj_sh`,`obj_trns_retry`,`calibration`) VALUES(";
                 ss<<total_result[indx][0][k]<<","<<dataset_id<<","<<task_id<<","<<total_result[indx][1][k]<<",";
                 ss<<total_result[indx][2][k]<<","<<total_result[indx][3][k]<<","<<total_result[indx][4][k]<<",";
-                ss<<total_result[indx][5][k]<<","<<total_result[indx][6][k]<<","<<total_result[indx][7][k]<<","<<exp_no<<",\""<<sync_alg<<"\",\""<<sch<<"\","<<cp_enable<<","<<sh_lev<<","<<transitive<<")";
+                ss<<total_result[indx][5][k]<<","<<total_result[indx][6][k]<<","<<total_result[indx][7][k]<<","<<exp_no<<",\""<<sync_alg<<"\",\""<<sch<<"\","<<cp_enable<<","<<sh_lev<<","<<transitive<<","<<calibration<<")";
                 stmt->executeUpdate(ss.str());
             }
             indx++;
