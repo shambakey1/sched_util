@@ -29,6 +29,8 @@
 #include <set>
 #include <climits>
 
+#define RESULTS_DIR "/e/lectures/real-time/PhD-work/STM/Dropbox/Practical/results_uno/final_results/"
+
 using namespace std;
 
 extern string total_comp[];    //Used for comparison against different distributions
@@ -114,17 +116,8 @@ extern void modObjTx(string data_set_host,string data_set,string user_name,strin
 																																						//object sharing starts at (1-sh_lev)*transactional length, and ends at the end of transaction)
 																																						//if update is true, then objects that already exist are updated. Otherwise, already existing objects are left intact
 extern void modObjTransitive(string data_set_host,string data_set,string user_name,string user_pass,int total_no_obj);	//Generate objects in a pattern that introduces transitive retry
-extern void extract_task_rc_res(string data_set_host,string data_set,string user_name,string user_pass,double sh_lev,int transitive,int u_cap,string sch,int cp_enable,int dataset_in=-1,int task_in=-1);
-/*
- * Extracts retry cost and response time for each job of each task of each dataset
- * that correspond to a specific utilization with different synchronization techniques.
- * Response time is extracted with: 1) without consideration for overhead of each CM
- * compared to locking and lock-free. 2) with consideration for overhead of each CM compared
- * to OMLP, RNLP, LOCK_FREE. Results can be specified for a specific dataset using datast_in
- * parameter, or a specific task in a specific dataset (using task_in and dataset_in). Default is
- * not to specify dataset, neither task
- */
-extern void analyze_results(string data_set_host,string data_set,string user_name,string user_pass,int dataset_in,int task_in,double sh_lev,int transitive,int u_cap,int op,int cp_enable,string sch);// Analyzes results according to the specified op_no. u_cap is utilization cap that accumulates a number of datasets
+extern int modPorObjSh(string data_set_host,string data_set,string user_name,string user_pass,int dataset_id,double sh_lev,int transitive,int check);	// Modify objects per portions based on sharing level(sh_lev). Note that sh_lev=1 must already exist. Otherwise, this method will not work
+
 #endif	/* UTIL_HPP */
 
 

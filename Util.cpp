@@ -18,6 +18,7 @@ void initDB(string data_set_host,string data_set,string user_name,string user_pa
         con = driver->connect(data_set_host, user_name, user_pass);
         /* Connect to the MySQL test database */
         con->setSchema(data_set);
+        stmt=con->createStatement();
         initialized=true;
         srand(time(0));
     }
@@ -3152,372 +3153,127 @@ void modObjTransitive(string data_set_host,string data_set,string user_name,stri
     }
 }
 
-void extract_task_rc_res(string data_set_host,string data_set,string user_name,string user_pass,double sh_lev,int transitive,int u_cap,string sch,int cp_enable,int dataset_in,int task_in){
-	/*
-	 * Extracts retry cost and response time for each job of each task of each dataset
-	 * that correspond to a specific utilization with different synchronization techniques.
-	 * Response time is extracted with: 1) without consideration for overhead of each CM
-	 * compared to locking and lock-free. 2) with consideration for overhead of each CM compared
-	 * to OMLP, RNLP, LOCK_FREE. Results can be specified for a specific dataset using datast_in
-	 * parameter, or a specific task in a specific dataset (using task_in and dataset_in). Default is
-	 * not to specify dataset, neither task
-	 */
+int modPorObjSh(string data_set_host,string data_set,string user_name,string user_pass,int dataset_id,double sh_lev,int transitive,int check){
+/*
+ * Modify objects per portions based on sharing level(sh_lev). Note that sh_lev=1 must already exist.
+ * Otherwise, this method will not work
+ */
 	try{
-		if(!initialized){
-			initDB(data_set_host,data_set,user_name,user_pass);
-		}
-		stringstream of_name("~/results/ds_");	//output file name
-		stringstream gp_name("~/");	//gnuplot file name
-		if(dataset_in!=-1){
-			gp_name<<"d_"<<dataset_in<<"_";
-		}
-		if(task_in!=-1){
-			gp_name<<"t_"<<task_in<<"_";
-		}
-		gp_name<<"u_cap_"<<u_cap<<"_sch_"<<sch<<"_trns_"<<transitive<<"_cp_"<<cp_enable<<"_sh_"<<sh_lev<<".gp";
-		ofstream of_str;	//output file stream
-		ofstream gp_str;	//output file for gnuplot
-		bool go_on;	//condition to iterate through any of retrived results for different syncrhonization techniques
-		bool ecm_con, ecm_oh_con, lcm_con, lcm_oh_con, pnf_con, pnf_oh_con, fblt_con, fblt_oh_con;	//conditions to iterate through retrived results for a specific synchronization technique
-		sql::ResultSet *dataset_task, *ecm, *lcm, *pnf, *fblt, *omlp, *rnlp, *lf;
-		sql::ResultSet *ecm_oh, *lcm_oh, *pnf_oh, *fblt_oh, *omlp_oh, *rnlp_oh, *lf_oh;
-		int dataset, task_id;        //id of current examined task
-		stringstream ss;
+        if(!initialized){
+        	initDB(data_set_host,data_set,user_name,user_pass);
+        }
+        int no_tasks=0;			//Number of tasks under current dataset
+        int total_no_objs=0;	//Total number of objects shared between tasks of current dataset
+        int tmp_total_no_objs=0;
+        double max_obj=0;		//Maximum object ID held by any Tx in any task under current dataset
+        double tmp_max_obj=0;
+        int no_objs_tx=0;			//Number of objects per current Tx
+        int no_sh_objs_tx=0;	//Number of shared objects per current Tx according to current sh_lev
+        int no_nsh_objs_tx=0;	//Number of non-shared objects per current Tx according to current sh_lev
+        int task_por_size=0;		//Number of portions per specific task
+        vector<double>::iterator it;	//Iterator of vector of objects
+        int ret_val=-1;	//Return value of this function. if check is 1, then it returns maximum total
+        				//number of objects in any Tx. Otherwise, it returns -1 to differentiate it from
+        				//the case where there is no accessed objects per any Tx
+        stringstream ss;
+        vector<vector<struct task_por> > modified_tasks;	//Each row corresponds to a task in the specified dataset.
+        sql::ResultSet *no_tasks_res;
+        sql::ResultSet *por_res;
+        vector<struct task_por> portions;   //resultant vector of tasks' portions
+        struct task_por cur_por;            //current read portion of current task
 
-		//Initialize gnuplot file
-		gp_str.open(gp_name.str().c_str());
-		gp_str<<"set terminal push"<<endl;
-		gp_str<<"set key top left"<<endl;
-		gp_str<<"set terminal postscript eps enhanced lw 1"<<endl;
-		gp_str<<"set style histogram cluster"<<endl;
-		gp_str<<"set style data histogram"<<endl;
-		gp_str<<"set style fill solid 1.0 border lt -2"<<endl;
+        /*
+         * Retrieve number of tasks under current dataset
+         */
+        ss<<"select no_tasks from datasets where id="<<dataset_id;
+        no_tasks_res=stmt->executeQuery(ss.str());
+        no_tasks_res->next();
+        no_tasks=no_tasks_res->getInt("no_tasks");
+        delete no_tasks_res;	//Not needed any more
 
-		//Retrive result_set of datasets and tasks
-		ss<<"select dataset, task from sh_results where";	//initial value
-		if(dataset_in!=-1){
-			ss<<" dataset="<<dataset_in<<" and";
-		}
-		if(task_in!=-1){
-			ss<<" task="<<task_in<<" and";
-		}
-		ss<<" calibration=0 and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" and (select u_cap from datasets where datasets.id=sh_results.dataset)="<<u_cap<<" group by dataset, task";
-		stmt=con->createStatement();
-		stmt->setResultSetType(sql::ResultSet::CONCUR_READ_ONLY);
-		stmt->setFetchSize(INT_MIN);
-		dataset_task=stmt->executeQuery(ss.str());
-		while(dataset_task->next()){
-			go_on=false;	//initialized to false to be used when outputting results into files
-			//Traverse through each task in each dataset in results
-			dataset=dataset_task->getInt("dataset");
-			task_id=dataset_task->getInt("task");
-			//extract results when calibration=0
-			ss.str("");
-			if(!sch.compare("G_EDF")){
-				ss<<"select * from sh_results where sync=\"ECM\" and calibration=0 and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			}
-			else if(!sch.compare("G_RMA")){
-				ss<<"select * from sh_results where sync=\"RCM\" and calibration=0 and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			}
-			ecm=stmt->executeQuery(ss.str());	//includes results for ECM or RCM depending on scheduler
-			ss.str("");
-			ss<<"select * from sh_results where sync=\"LCM\" and calibration=0 and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			lcm=stmt->executeQuery(ss.str());
-			ss.str("");
-			ss<<"select * from sh_results where sync=\"PNF\" and calibration=0 and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			pnf=stmt->executeQuery(ss.str());
-			ss.str("");
-			ss<<"select * from sh_results where sync=\"FBLT\" and calibration=0 and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			fblt=stmt->executeQuery(ss.str());
-			ss.str("");
-			ss<<"select * from sh_results where sync=\"OMLP\" and calibration=0 and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			omlp=stmt->executeQuery(ss.str());
-			ss.str("");
-			ss<<"select * from sh_results where sync=\"RNLP\" and calibration=0 and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			rnlp=stmt->executeQuery(ss.str());
-			ss.str("");
-			ss<<"select * from sh_results where sync=\"LOCK_FREE\" and calibration=0 and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			lf=stmt->executeQuery(ss.str());
+        /*
+         * Retrieve current tasks' structure under specified dataset
+         */
+        for(int task_no=0;task_no<no_tasks;task_no++){
+            ss.str("");
+            ss<<"select * from task_st where dataset="<<dataset_id<<" and task="<<task_no<<" and obj_sh=1 and obj_trns_retry="<<transitive;
+            por_res=stmt->executeQuery(ss.str());
+            if(!(por_res->rowsCount())){
+            	cout<<"Err: Something wrong with the dataset with the specified parameters. Please check it exists"<<endl;
+            	exit(0);
+            }
+            while(por_res->next()){
+                cur_por.por_type=por_res->getInt("por_type");
+                cur_por.por_len=por_res->getDouble("por_len");
+                cur_por.mod_por_len=cur_por.por_len;
+                cur_por.por_obj=extractObj(por_res->getString("objs"));
+                portions.push_back(cur_por);
+                if(cur_por.por_type){
+                	// It is an atomic section part
+                	tmp_total_no_objs=cur_por.por_obj.size();
+                	total_no_objs=tmp_total_no_objs>total_no_objs?tmp_total_no_objs:total_no_objs;
+                	tmp_max_obj=*max_element(cur_por.por_obj.begin(),cur_por.por_obj.end());
+                	max_obj=tmp_max_obj>max_obj?tmp_max_obj:max_obj;
+                }
+            }
+            modified_tasks.push_back(portions);
+            portions.clear();
+        }
+        if(check){
+        	//Just return maximum total number of shared objects per any Tx
+        	ret_val=ceil(sh_lev*total_no_objs);
+        }
+        else{
+        	//Modify objects per each Tx according to sharing level. Note this change is made relative
+        	//to case where sh_lev=1
+        	for(int task_no=0;task_no<no_tasks;task_no++){
+        		task_por_size=modified_tasks[task_no].size();
+        		for(int por_id=0;por_id<task_por_size;por_id++){
+        			ss.str("");
+        			if(modified_tasks[task_no][por_id].por_type){
+        				//It is a Tx
+        				no_objs_tx=modified_tasks[task_no][por_id].por_obj.size();
+        				no_sh_objs_tx=(int)ceil(sh_lev*no_objs_tx);
+        				no_nsh_objs_tx=no_objs_tx-no_sh_objs_tx;
+        				it=modified_tasks[task_no][por_id].por_obj.begin();
+        				for(int i=0;i<no_nsh_objs_tx;i++){
+        					//Insert a new non-shared object at position 0 and remove one old shared object from the back
+        					modified_tasks[task_no][por_id].por_obj.insert(it,++max_obj);
+        					modified_tasks[task_no][por_id].por_obj.erase(modified_tasks[task_no][por_id].por_obj.end()-1);
+        				}
+        				ss<<"INSERT INTO `test`.`task_st`(`dataset`,`task`,`id`,`por_type`,`por_len`,`obj_sh`,`obj_trns_retry`,`objs`) VALUES(";
+						ss<<dataset_id<<","<<task_no<<","<<por_id<<",1,"<<modified_tasks[task_no][por_id].por_len<<","<<sh_lev<<","<<transitive<<",'";
+                        for(int i=0;i<no_objs_tx;i++){
+                            ss<<modified_tasks[task_no][por_id].por_obj[i];
+                            if(i!=no_objs_tx-1){
+                                ss<<",";
+                            }
+                            else{
+                                ss<<"')";
+                            }
+                        }
+        			}
+        			else{
+        				ss<<"INSERT INTO `test`.`task_st`(`dataset`,`task`,`id`,`por_type`,`por_len`,`obj_sh`,`obj_trns_retry`,`objs`) VALUES(";
+						ss<<dataset_id<<","<<task_no<<","<<por_id<<",0,"<<modified_tasks[task_no][por_id].por_len<<","<<sh_lev<<","<<transitive<<",-1)";
+        			}
+        			stmt->execute(ss.str());
+        		}
 
-			//extract results when calibration=1
-			ss.str("");
-			if(!sch.compare("G_EDF")){
-				ss<<"select * from sh_results where calibration=1 and sync=\"ECM\" and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			}
-			else if(!sch.compare("G_RMA")){
-				ss<<"select * from sh_results where calibration=1 and sync=\"RCM\" and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			}
-			ecm_oh=stmt->executeQuery(ss.str());
-			ss.str("");
-			ss<<"select * from sh_results where calibration=1 and sync=\"LCM\" and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			lcm_oh=stmt->executeQuery(ss.str());
-			ss.str("");
-			ss<<"select * from sh_results where calibration=1 and sync=\"PNF\" and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			pnf_oh=stmt->executeQuery(ss.str());
-			ss.str("");
-			ss<<"select * from sh_results where calibration=1 and sync=\"FBLT\" and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			fblt_oh=stmt->executeQuery(ss.str());
-			ss.str("");
-			ss<<"select * from sh_results where calibration=1 and sync=\"OMLP\" and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			omlp_oh=stmt->executeQuery(ss.str());
-			ss.str("");
-			ss<<"select * from sh_results where calibration=1 and sync=\"RNLP\" and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			rnlp_oh=stmt->executeQuery(ss.str());
-			ss.str("");
-			ss<<"select * from sh_results where calibration=1 and sync=\"LOCK_FREE\" and dataset="<<dataset<<" and task="<<task_id<<" and sch=\""<<sch<<"\" and obj_sh="<<sh_lev<<" and obj_trns_retry="<<transitive<<" and cp_enable="<<cp_enable<<" group by dataset, task, instance";
-			lf_oh=stmt->executeQuery(ss.str());
+        	}
+        }
 
-			//check each retrived resultset has the same number of records. If not, then print err and exit
-			if(ecm->rowsCount()!=lcm->rowsCount() || ecm->rowsCount()!=pnf->rowsCount() ||
-					ecm->rowsCount()!=fblt->rowsCount() || ecm->rowsCount()!=omlp->rowsCount() ||
-					ecm->rowsCount()!=rnlp->rowsCount() || (lf->rowsCount()!=0 && ecm->rowsCount()!=lf->rowsCount()) ||
-					ecm->rowsCount()!=ecm_oh->rowsCount() || ecm->rowsCount()!=lcm_oh->rowsCount() ||
-					ecm->rowsCount()!=pnf_oh->rowsCount() || ecm->rowsCount()!=fblt_oh->rowsCount() ||
-					(lf_oh->rowsCount()!=0 && ecm->rowsCount()!=lf_oh->rowsCount())
-			){
-				cout<<"number of jobs is not equal for dataset:"<<dataset<<" and task:"<<task_id<<endl;
-				exit(0);
-			}
-
-			//create file to record results of current task and start new section in gnuplot file
-			of_name.str("");
-			of_name<<dataset<<"_t_"<<task_id<<"_sch_"<<sch<<"_trns_"<<transitive<<"_cp_"<<cp_enable<<"_sh_"<<sh_lev<<".dat";
-			of_str.open(of_name.str().c_str());
-			gp_str<<"# "<<of_name.str()<<endl<<endl;
-
-			//record required results into outfile
-			//if lock_free does not support current dataset, then do not include it in outfile
-			of_str<<"#ecm\tlcm\tpnf\tfblt\tomlp\trnlp";
-			if(lf->rowsCount()==0){
-				of_str<<endl;
-			}
-			else{
-				of_str<<"\tlf"<<endl;
-			}
-
-			//first section of output file for retry cost
-			of_str<<"#first section for retry cost"<<endl;
-			while(ecm->next()){
-				//move other result sets to the next record
-				lcm->next(); pnf->next(); fblt->next(); omlp->next(); rnlp->next(); lf->next();
-				//Write retry cost into output file
-				of_str<<ecm->getDouble("abr_dur")<<"\t"<<lcm->getDouble("abr_dur")<<"\t"<<
-						pnf->getDouble("abr_dur")<<"\t"<<fblt->getDouble("abr_dur")<<"\t"<<
-						omlp->getDouble("abr_dur")<<"\t"<<rnlp->getDouble("abr_dur");
-				if(lf->rowsCount()==0){
-					of_str<<endl;
-				}
-				else{
-					of_str<<"\t"<<lf->getDouble("abr_dur")<<endl;
-				}
-			}
-			of_str<<endl<<endl;
-
-			//Reset all resultsets to the beforefirst to retrieve response time
-			ecm->beforeFirst(); lcm->beforeFirst(); pnf->beforeFirst(); fblt->beforeFirst();
-			omlp->beforeFirst(); rnlp->beforeFirst();
-			if(lf->rowsCount()>0){
-				lf->beforeFirst();
-			}
-
-			//second section of output file for response time without overhead
-			of_str<<"#2nd section for response time without overhead"<<endl;
-			while(ecm->next()){
-				//move other result sets to the next record
-				lcm->next(); pnf->next(); fblt->next(); omlp->next(); rnlp->next(); lf->next();
-
-				of_str<<ecm->getDouble("response")<<"\t"<<lcm->getDouble("response")<<"\t"<<
-						pnf->getDouble("response")<<"\t"<<fblt->getDouble("response")<<"\t"<<
-						omlp->getDouble("response")<<"\t"<<rnlp->getDouble("response");
-				if(lf->rowsCount()==0){
-					of_str<<endl;
-				}
-				else{
-					of_str<<"\t"<<lf->getDouble("response")<<endl;
-				}
-			}
-			of_str<<endl<<endl;
-
-			//Reset all resultsets to the beforefirst to retrieve response time
-			ecm->beforeFirst(); lcm->beforeFirst(); pnf->beforeFirst(); fblt->beforeFirst();
-
-			//Third section of output file for response time considering overhead compared to OMLP
-			of_str<<"#3d section for response time considering overhead compared to OMLP"<<endl;
-			double ecm_omlp;	//overhead of ecm(rcm) compared to omlp
-			double lcm_omlp;	//overhead of lcm compared to omlp
-			double pnf_omlp;	//overhead of pnf compared to omlp
-			double fblt_omlp;	//overhead of fblt compared to omlp
-			while(ecm->next()){
-				//move other result_sets to the next record
-				lcm->next(); pnf->next(); fblt->next(); ecm_oh->next();	lcm_oh->next();
-				pnf_oh->next(); fblt_oh->next(); omlp_oh->next();
-				//calculate additional overhead of each CM compared to OMLP
-				ecm_omlp=ecm_oh->getDouble("response")-omlp_oh->getDouble("response");
-				ecm_omlp=ecm_omlp>0?ecm_omlp:0;//because we calculate only additional overhead compared to OMLP
-				lcm_omlp=lcm_oh->getDouble("response")-omlp_oh->getDouble("response");
-				lcm_omlp=lcm_omlp>0?lcm_omlp:0;//because we calculate only additional overhead compared to OMLP
-				pnf_omlp=pnf_oh->getDouble("response")-omlp_oh->getDouble("response");
-				pnf_omlp=pnf_omlp>0?pnf_omlp:0;//because we calculate only additional overhead compared to OMLP
-				fblt_omlp=fblt_oh->getDouble("response")-omlp_oh->getDouble("response");
-				fblt_omlp=fblt_omlp>0?fblt_omlp:0;//because we calculate only additional overhead compared to OMLP
-				//Write records into output file
-				of_str<<(ecm->getDouble("response")-ecm_omlp)<<"\t"<<(lcm->getDouble("response")-lcm_omlp)<<"\t"<<
-						(pnf->getDouble("response")-pnf_omlp)<<"\t"<<(fblt->getDouble("response")-fblt_omlp)<<"\t"<<
-						"0"<<"\t"<<"0";
-				if(lf->rowsCount()==0){
-					of_str<<endl;
-				}
-				else{
-					of_str<<"\t"<<"0"<<endl;
-				}
-			}
-			of_str<<endl<<endl;
-
-			//Reset all resultsets to the beforefirst to retrieve response time
-			ecm->beforeFirst(); lcm->beforeFirst(); pnf->beforeFirst(); fblt->beforeFirst();
-			ecm_oh->beforeFirst(); lcm_oh->beforeFirst(); pnf_oh->beforeFirst(); fblt_oh->beforeFirst();
-
-			//Fourth section of output file for response time considering overhead compared to RNLP
-			of_str<<"#4th section for response time considering overhead compared to RNLP"<<endl;
-			double ecm_rnlp;	//overhead of ecm(rcm) compared to rnlp
-			double lcm_rnlp;	//overhead of lcm compared to rnlp
-			double pnf_rnlp;	//overhead of pnf compared to rnlp
-			double fblt_rnlp;	//overhead of fblt compared to rnlp
-			while(ecm->next()){
-				//move other result_sets to the next record
-				lcm->next(); pnf->next(); fblt->next(); ecm_oh->next();
-				lcm_oh->next(); pnf_oh->next(); fblt_oh->next(); rnlp_oh->next();
-				//calculate overhead of each CM compared to RNLP
-				ecm_rnlp=ecm_oh->getDouble("response")-rnlp_oh->getDouble("response");
-				ecm_rnlp=ecm_rnlp>0?ecm_rnlp:0;//because we calculate only additional overhead compared to RNLP
-				lcm_rnlp=lcm_oh->getDouble("response")-rnlp_oh->getDouble("response");
-				lcm_rnlp=lcm_rnlp>0?lcm_rnlp:0;//because we calculate only additional overhead compared to RNLP
-				pnf_rnlp=pnf_oh->getDouble("response")-rnlp_oh->getDouble("response");
-				pnf_rnlp=pnf_rnlp>0?pnf_rnlp:0;//because we calculate only additional overhead compared to RNLP
-				fblt_rnlp=fblt_oh->getDouble("response")-rnlp_oh->getDouble("response");
-				fblt_rnlp=fblt_rnlp>0?fblt_rnlp:0;//because we calculate only additional overhead compared to RNLP
-				//Write records into output file
-				of_str<<(ecm->getDouble("response")-ecm_rnlp)<<"\t"<<(lcm->getDouble("response")-lcm_rnlp)<<"\t"<<
-						(pnf->getDouble("response")-pnf_rnlp)<<"\t"<<(fblt->getDouble("response")-fblt_rnlp)<<"\t"<<
-						"0"<<"\t"<<"0";
-				if(lf->rowsCount()==0){
-					of_str<<endl;
-				}
-				else{
-					of_str<<"\t"<<"0"<<endl;
-				}
-			}
-			of_str<<endl<<endl;
-
-			//Reset all resultsets to the beforefirst to retrieve response time
-			ecm->beforeFirst(); lcm->beforeFirst(); pnf->beforeFirst(); fblt->beforeFirst();
-			ecm_oh->beforeFirst(); lcm_oh->beforeFirst(); pnf_oh->beforeFirst(); fblt_oh->beforeFirst();
-
-			//Fifth section of output file for response time considering overhead compared to LOCK_FREE
-			//if LOCK_FREE is supported for current dataset
-			if(lf->rowsCount()>0){
-				of_str<<"#5th section for response time considering overhead compared to LOCK_FREE"<<endl;
-				double ecm_lf;	//overhead of ecm(rcm) compared to LOCK_FREE
-				double lcm_lf;	//overhead of lcm compared to LOCK_FREE
-				double pnf_lf;	//overhead of pnf compared to LOCK_FREE
-				double fblt_lf;	//overhead of fblt compared to LOCK_FREE
-				while(ecm->next()){
-					//move other result_sets to the next record
-					lcm->next(); pnf->next(); fblt->next(); ecm_oh->next();
-					lcm_oh->next(); pnf_oh->next(); fblt_oh->next(); lf_oh->next();
-					//calculate overhead of each CM compared to LOCK_FREE
-					ecm_lf=ecm_oh->getDouble("response")-lf_oh->getDouble("response");
-					ecm_lf=ecm_lf>0?ecm_lf:0;//because we calculate only additional overhead compared to LOCK_FREE
-					lcm_lf=lcm_oh->getDouble("response")-lf_oh->getDouble("response");
-					lcm_lf=lcm_lf>0?lcm_lf:0;//because we calculate only additional overhead compared to LOCK_FREE
-					pnf_lf=pnf_oh->getDouble("response")-lf_oh->getDouble("response");
-					pnf_lf=pnf_lf>0?pnf_lf:0;//because we calculate only additional overhead compared to LOCK_FREE
-					fblt_lf=fblt_oh->getDouble("response")-lf_oh->getDouble("response");
-					fblt_lf=fblt_lf>0?fblt_lf:0;//because we calculate only additional overhead compared to LOCK_FREE
-					//Write records into output file
-					of_str<<(ecm->getDouble("response")-ecm_lf)<<"\t"<<(lcm->getDouble("response")-lcm_lf)<<"\t"<<
-							(pnf->getDouble("response")-pnf_lf)<<"\t"<<(fblt->getDouble("response")-fblt_lf)<<"\t"<<
-							""<<"\t"<<""<<"\t"<<""<<endl;
-				}
-				of_str<<endl<<endl;
-
-				//Reset all resultsets to the beforefirst to retrieve response time
-				ecm_oh->beforeFirst(); lcm_oh->beforeFirst(); pnf_oh->beforeFirst(); fblt_oh->beforeFirst();
-				omlp_oh->beforeFirst(); rnlp_oh->beforeFirst(); lf_oh->beforeFirst();
-			}
-
-			//Sixth section of output file for response time considering calibration for all synchronization techniques
-			of_str<<"#6th section for response time considering calibration for all synchronization techniques"<<endl;
-			while(ecm_oh->next()){
-				//move other result_sets to the next record
-				ecm_oh->next(); lcm_oh->next(); pnf_oh->next(); fblt_oh->next();
-				omlp_oh->next(); rnlp_oh->next(); lf_oh->next();
-				//Write records into output file
-				of_str<<ecm_oh->getDouble("response")<<"\t"<<lcm_oh->getDouble("response")<<"\t"<<
-						pnf_oh->getDouble("response")<<"\t"<<fblt_oh->getDouble("response")<<"\t"<<
-						omlp_oh->getDouble("response")<<"\t"<<rnlp_oh->getDouble("response");
-				if(lf->rowsCount()==0){
-					of_str<<endl;
-				}
-				else{
-					of_str<<"\t"<<lf_oh->getDouble("response")<<endl;
-				}
-			}
-			of_str<<endl<<endl;
-
-			//close outfile
-			of_str.close();
-
-			//Extract relative deadline for current task to be plotted against responses of different synchronization techniques
-			ecm->first();
-			gp_str<<"f(x)="<<(ecm->getUInt64("deadline")-ecm->getUInt64("start"))<<endl;
-
-			//Add plot commands
-			gp_str<<"set output "<<(of_name.str())<<".eps"<<endl;
-			if(lf->rowsCount()>0){
-				gp_str<<"set multiplot layout 3,3 columnfirst"<<endl;
-				gp_str<<"plot \""<<(of_name.str())<<"\", i 0 u 1:7"<<endl;
-				gp_str<<"plot \""<<(of_name.str())<<"\", i 1 u 1:7, f(x) with lines"<<endl;
-				gp_str<<"plot \""<<(of_name.str())<<"\", i 2 u 1:7, f(x) with lines"<<endl;
-				gp_str<<"plot \""<<(of_name.str())<<"\", i 3 u 1:7, f(x) with lines"<<endl;
-				gp_str<<"plot \""<<(of_name.str())<<"\", i 4 u 1:7, f(x) with lines"<<endl;
-				gp_str<<"plot \""<<(of_name.str())<<"\", i 5 u 1:7"<<endl;
-			}
-			else{
-				gp_str<<"set multiplot layout 3,3 columnfirst"<<endl;
-				gp_str<<"plot \""<<(of_name.str())<<"\", i 0 u 1:6"<<endl;
-				gp_str<<"plot \""<<(of_name.str())<<"\", i 1 u 1:6, f(x) with lines"<<endl;
-				gp_str<<"plot \""<<(of_name.str())<<"\", i 2 u 1:6, f(x) with lines"<<endl;
-				gp_str<<"plot \""<<(of_name.str())<<"\", i 3 u 1:6, f(x) with lines"<<endl;
-				gp_str<<"plot \""<<(of_name.str())<<"\", i 4 u 1:6"<<endl;
-			}
-			gp_str<<"unset multiplot"<<endl;
-			gp_str<<endl<<endl;
-		}
-
-		//Record last commands in gp file and close it
-		gp_str<<"set output"<<endl;
-		gp_str<<"set terminal pop"<<endl;
-		gp_str.close();
-
-		delete dataset_task;
-		delete ecm;
-		delete lcm;
-		delete pnf;
-		delete fblt;
-		delete omlp;
-		delete rnlp;
-		delete lf;
-		delete ecm_oh;
-		delete lcm_oh;
-		delete pnf_oh;
-		delete fblt_oh;
-		delete omlp_oh;
-		delete rnlp_oh;
-		delete lf_oh;
+        /*
+         * Delete resource and return final value
+         */
+        delete por_res;
+        delete stmt;
+        delete con;
+        initialized=false;
+        return ret_val;
 	}
 	catch(sql::InvalidArgumentException &e) {
-	        cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
+	    cout << "#\t Invalid Argument: " << e.what()<<" on line "<<__LINE__;
 		cout << " (MySQL error code: " << e.getErrorCode();
 		cout << ", SQLState: " << e.getSQLState() << " )" << endl;
 	    }
@@ -3527,7 +3283,7 @@ void extract_task_rc_res(string data_set_host,string data_set,string user_name,s
 		cout << ", SQLState: " << e.getSQLState() << " )" << endl;
 	    }
 	    catch (sql::SQLException &e){
-	        /*
+	    /*
 		The MySQL Connector/C++ throws three different exceptions:
 			- sql::MethodNotImplementedException (derived from sql::SQLException)
 			- sql::InvalidArgumentException (derived from sql::SQLException)
@@ -3535,7 +3291,7 @@ void extract_task_rc_res(string data_set_host,string data_set,string user_name,s
 
 	                 sql::SQLException is the base class.
 	        */
-	        cout << endl;
+		cout << endl;
 		cout << "# ERR: DbcException in " << __FILE__;
 		cout << "(" << EXAMPLE_FUNCTION << ") on line " << __LINE__ << endl;
 		/* Use what(), getErrorCode() and getSQLState() */
@@ -3544,11 +3300,11 @@ void extract_task_rc_res(string data_set_host,string data_set,string user_name,s
 		cout << ", SQLState: " << e.getSQLState() << " )" << endl;
 
 		if (e.getErrorCode() == 1047) {
-	            /*
-	             Error: 1047 SQLSTATE: 08S01 (ER_UNKNOWN_COM_ERROR)
-				Message: Unknown command
-	          	*/
-		    cout << "# ERR: Your server seems not to support PS at all because its MYSQL <4.1" << endl;
+			/*
+			 Error: 1047 SQLSTATE: 08S01 (ER_UNKNOWN_COM_ERROR)
+			Message: Unknown command
+			*/
+			cout << "# ERR: Your server seems not to support PS at all because its MYSQL <4.1" << endl;
 		}
 	            cout << "not ok 1 - examples/exceptions.cpp" << endl;
 	     }
@@ -3560,29 +3316,7 @@ void extract_task_rc_res(string data_set_host,string data_set,string user_name,s
 	        cout << "not ok 1 - examples/exceptions.cpp" << endl;
 	    }
 	    catch(exception e){
-	        cout<<"Exception i nreadTaskSet():"<<e.what()<<endl;
+	        cout<<"Exception in readTaskPor():"<<e.what()<<endl;
 	    }
 }
-/*
-void dur(string data_set_host,string data_set,string user_name,string user_pass,int dataset_in,double sh_lev,int transitive,int u_cap,int cp_enable,string sch="all",int task_in=-1){
-}
-*/
-void analyze_results(string data_set_host,string data_set,string user_name,string user_pass,int dataset_in,int task_in,double sh_lev,int transitive,int u_cap,int op_no,int cp_enable,string sch){
-	/*
-     * Analyzes results according to the specified op_no. u_cap is utilization
-     * cap that accumulates a number of datasets
-     */
-	try{
-		switch (op_no){
-		case 1:
-			extract_task_rc_res(data_set_host,data_set,user_name,user_pass,sh_lev,transitive,u_cap,sch,cp_enable,dataset_in,task_in);
-			break;
-		default:
-			cout<<"Err: you entered invalid operation number of analyzing data"<<endl;
-			exit(0);
-		}
-	}
-	catch(exception e){
-		cout<<"Exception in analyze_results():"<<e.what()<<endl;
-	}
-}
+
